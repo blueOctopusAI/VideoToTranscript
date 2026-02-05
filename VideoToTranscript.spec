@@ -112,8 +112,8 @@ app = BUNDLE(
     info_plist={
         'CFBundleName': 'Video to Transcript',
         'CFBundleDisplayName': 'Video to Transcript',
-        'CFBundleVersion': '1.1.0',
-        'CFBundleShortVersionString': '1.1.0',
+        'CFBundleVersion': '1.0.1',
+        'CFBundleShortVersionString': '1.0.1',
         'NSHighResolutionCapable': True,
         'LSMinimumSystemVersion': '11.0',
         'NSRequiresAquaSystemAppearance': False,  # Support dark mode

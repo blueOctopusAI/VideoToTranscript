@@ -50,7 +50,7 @@
 
 ---
 
-## [1.3.0] - 2026-02-05
+## [1.0.1] - 2026-02-05
 
 ### Added
 - Sentence-level segmentation checkbox - toggle between natural pauses and sentence boundaries (., !, ?) without re-transcribing. Uses word-level timestamps for precise sentence timing.
@@ -61,43 +61,6 @@
 ### Changed
 - Edit button restyled with blue outline, bold text, and pencil icon for better visibility
 - Aligned left and right panel headers for consistent layout
-
----
-
-## [1.2.0] - 2025-02-04
-
-### Added
-- PyInstaller packaging for distributable macOS .app bundle
-- Build script (`scripts/build-app.sh`) for easy app building
-- Development dependencies file (`requirements-dev.txt`)
-- Comprehensive beginner-friendly documentation
-- Troubleshooting section in README
-
-### Changed
-- README completely rewritten with two installation paths (app download vs source)
-- Step-by-step instructions for virtual environment setup
-
----
-
-## [1.1.0] - 2025-02-04
-
-### Added
-- "Show timestamps" checkbox to toggle timestamp display in preview
-- Format preview - switching export format shows that format in the view
-- Simplified timestamp format (HH:MM:SS) for display, full precision for SRT/VTT
-- Edit mode - toggle to edit transcript text, updates all export formats
-  - Orange border and "EDITING" badge indicate edit mode
-  - Edits parsed back to segments preserving timestamps
-
-### Changed
-- Checkbox is greyed out and forced on when SRT or VTT format is selected
-- TXT export respects timestamp checkbox (includes timestamps when checked, omits when unchecked)
-- TXT export now uses paragraph spacing (double newlines) matching the view
-- Copy button now copies the current view (respecting format and timestamp settings)
-
-### Fixed
-- Text visibility issue (white text on white background)
-- Folder import now finds files with uppercase extensions (.MOV, .MP4, etc.)
 
 ---
 
@@ -114,6 +77,11 @@
 - Batch transcription support
 - Settings dialog for model configuration
 - Progress tracking with status updates
+- "Show timestamps" checkbox to toggle timestamp display in preview
+- Format preview - switching export format shows that format in the view
+- Edit mode - toggle to edit transcript text, updates all export formats
+- PyInstaller packaging for distributable macOS .app bundle
+- Beginner-friendly documentation
 
 ### Supported Formats
 - Video: MP4, MKV, AVI, MOV, WMV, FLV, WebM, M4V, MPEG, MPG, 3GP, OGV
