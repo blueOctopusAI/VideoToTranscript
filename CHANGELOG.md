@@ -37,10 +37,30 @@
 - [x] Edit mode for modifying transcripts
 - [x] PyInstaller packaging for distributable .app bundle
 - [x] Beginner-friendly documentation
+- [x] Sentence-level segmentation toggle (switchable after transcription)
+- [x] Export All button (all formats at once)
+- [x] Improved Edit button visibility
+- [x] Timestamped filename for TXT exports
+- [x] Re-transcribe option for already-completed videos
+- [x] Aligned left/right panel layout
 - [ ] Enhanced error messages for common issues
 - [ ] Keyboard shortcuts
 - [ ] Remember window size/position
 - [ ] Dark mode support
+
+---
+
+## [1.3.0] - 2026-02-05
+
+### Added
+- Sentence-level segmentation checkbox - toggle between natural pauses and sentence boundaries (., !, ?) without re-transcribing. Uses word-level timestamps for precise sentence timing.
+- Export All button - export TXT, SRT, VTT, and JSON formats at once to a chosen directory
+- Timestamped TXT filename - when exporting TXT with timestamps enabled, default filename includes `_timestamped` suffix
+- Re-transcribe option - hitting "Transcribe" on already-completed videos now offers to re-transcribe instead of blocking
+
+### Changed
+- Edit button restyled with blue outline, bold text, and pencil icon for better visibility
+- Aligned left and right panel headers for consistent layout
 
 ---
 

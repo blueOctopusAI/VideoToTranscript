@@ -16,6 +16,7 @@ from PySide6.QtWidgets import (
     QLabel,
     QProgressBar,
     QMessageBox,
+    QCheckBox,
 )
 
 from ..models.video_item import VideoItem, TranscriptionStatus
@@ -49,10 +50,14 @@ class VideoListWidget(QWidget):
         layout.setContentsMargins(10, 10, 10, 10)
         layout.setSpacing(10)
 
-        # Header
+        # Header (matches right panel header structure)
+        header_layout = QHBoxLayout()
+        header_layout.setContentsMargins(0, 0, 0, 0)
         header_label = QLabel("Videos")
         header_label.setStyleSheet("font-weight: bold; font-size: 14px;")
-        layout.addWidget(header_label)
+        header_layout.addWidget(header_label)
+        header_layout.addStretch()
+        layout.addLayout(header_layout)
 
         # List widget with drag-drop
         self.list_widget = QListWidget()
@@ -100,6 +105,14 @@ class VideoListWidget(QWidget):
         buttons_layout.addWidget(self.add_folder_btn)
 
         layout.addLayout(buttons_layout)
+
+        # Segmentation option
+        self.sentence_segments_checkbox = QCheckBox("Sentence-level segments")
+        self.sentence_segments_checkbox.setChecked(False)
+        self.sentence_segments_checkbox.setToolTip(
+            "Split transcript at sentence boundaries (., !, ?) instead of speech pauses"
+        )
+        layout.addWidget(self.sentence_segments_checkbox)
 
         # Action buttons row
         action_layout = QHBoxLayout()

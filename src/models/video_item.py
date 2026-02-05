@@ -6,6 +6,12 @@ from pathlib import Path
 from typing import Optional
 
 
+class SegmentationMode:
+    """Constants for segmentation mode."""
+    NATURAL_PAUSES = "natural_pauses"
+    SENTENCE_LEVEL = "sentence_level"
+
+
 class TranscriptionStatus(Enum):
     """Status of a video item's transcription."""
     PENDING = "pending"
@@ -61,6 +67,14 @@ class TranscriptionSegment:
 
 
 @dataclass
+class WordTiming:
+    """A single word with timing information from Whisper."""
+    start: float
+    end: float
+    word: str
+
+
+@dataclass
 class VideoItem:
     """Represents a video file and its transcription state."""
     file_path: Path
@@ -68,6 +82,8 @@ class VideoItem:
     segments: list[TranscriptionSegment] = field(default_factory=list)
     error_message: Optional[str] = None
     progress: float = 0.0  # 0-100
+    original_segments: list[TranscriptionSegment] = field(default_factory=list)
+    word_data: list[WordTiming] = field(default_factory=list)
 
     def __post_init__(self):
         """Ensure file_path is a Path object."""
@@ -110,6 +126,8 @@ class VideoItem:
     def clear_transcription(self) -> None:
         """Clear the transcription data and reset status."""
         self.segments = []
+        self.original_segments = []
+        self.word_data = []
         self.status = TranscriptionStatus.PENDING
         self.error_message = None
         self.progress = 0.0

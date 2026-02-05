@@ -1,13 +1,77 @@
 """Transcription worker using QThread for non-blocking UI."""
 
+import re
 from pathlib import Path
 from typing import Optional
 
 from PySide6.QtCore import QThread, Signal
 
-from ..models.video_item import VideoItem, TranscriptionSegment, TranscriptionStatus
+from ..models.video_item import VideoItem, TranscriptionSegment, TranscriptionStatus, SegmentationMode, WordTiming
 from .audio_extractor import AudioExtractor
 from .model_manager import ModelManager, DEFAULT_MODEL
+
+# Sentence-ending punctuation pattern
+_SENTENCE_END_RE = re.compile(r'[.!?]$')
+
+
+def build_sentence_segments(word_data: list[WordTiming]) -> list[TranscriptionSegment]:
+    """
+    Build sentence-level segments from word timing data.
+
+    Splits at sentence-ending punctuation (., !, ?) to build
+    new sentence-based segments with precise word-level timing.
+    """
+    if not word_data:
+        return []
+
+    sentence_segments = []
+    current_words = []
+    sentence_start = None
+
+    for wt in word_data:
+        word_text = wt.word.strip()
+        if not word_text:
+            continue
+
+        if sentence_start is None:
+            sentence_start = wt.start
+
+        current_words.append(word_text)
+
+        # Check if this word ends a sentence
+        if _SENTENCE_END_RE.search(word_text):
+            sentence_text = " ".join(current_words)
+            sentence_segments.append(TranscriptionSegment(
+                start=sentence_start,
+                end=wt.end,
+                text=sentence_text,
+            ))
+            current_words = []
+            sentence_start = None
+
+    # Handle remaining words (no sentence-ending punctuation)
+    if current_words:
+        last = word_data[-1]
+        sentence_segments.append(TranscriptionSegment(
+            start=sentence_start if sentence_start is not None else last.start,
+            end=last.end,
+            text=" ".join(current_words),
+        ))
+
+    return sentence_segments
+
+
+def _store_word_data(video_item: VideoItem, raw_segments: list) -> None:
+    """
+    Extract and store word timing data from raw Whisper segments onto the VideoItem.
+    Each raw segment should have a .words attribute (from word_timestamps=True).
+    """
+    word_data = []
+    for seg in raw_segments:
+        if hasattr(seg, 'words') and seg.words:
+            for w in seg.words:
+                word_data.append(WordTiming(start=w.start, end=w.end, word=w.word))
+    video_item.word_data = word_data
 
 
 class TranscriptionWorker(QThread):
@@ -31,6 +95,7 @@ class TranscriptionWorker(QThread):
         video_item: VideoItem,
         model_manager: ModelManager,
         model_name: str = DEFAULT_MODEL,
+        segment_mode: str = SegmentationMode.NATURAL_PAUSES,
         parent=None
     ):
         """
@@ -40,12 +105,14 @@ class TranscriptionWorker(QThread):
             video_item: The video item to transcribe
             model_manager: Shared model manager instance
             model_name: Whisper model to use
+            segment_mode: Segmentation mode (natural_pauses or sentence_level)
             parent: Parent QObject
         """
         super().__init__(parent)
         self.video_item = video_item
         self.model_manager = model_manager
         self.model_name = model_name
+        self.segment_mode = segment_mode
         self._is_cancelled = False
         self._audio_extractor: Optional[AudioExtractor] = None
 
@@ -109,7 +176,7 @@ class TranscriptionWorker(QThread):
         # Clear any previous segments
         self.video_item.segments = []
 
-        # Transcribe with progress tracking
+        # Always use word_timestamps so we can switch segmentation modes after the fact
         segments_iter, info = model.transcribe(
             str(audio_path),
             beam_size=5,
@@ -117,16 +184,22 @@ class TranscriptionWorker(QThread):
             vad_filter=True,  # Voice activity detection
             vad_parameters=dict(
                 min_silence_duration_ms=500,
-            )
+            ),
+            word_timestamps=True,
         )
 
         # Get total duration for progress calculation
         total_duration = info.duration if info.duration > 0 else 1.0
 
+        # Collect raw segments for word data extraction
+        raw_segments = []
+
         # Process segments
         for segment in segments_iter:
             if self._is_cancelled:
                 return
+
+            raw_segments.append(segment)
 
             # Create segment object
             transcription_segment = TranscriptionSegment(
@@ -154,6 +227,19 @@ class TranscriptionWorker(QThread):
 
         if self._is_cancelled:
             return
+
+        # Store original segments and word data for post-hoc mode switching
+        self.video_item.original_segments = list(self.video_item.segments)
+        _store_word_data(self.video_item, raw_segments)
+
+        # Post-process: resegment by sentences if requested
+        use_sentence_mode = self.segment_mode == SegmentationMode.SENTENCE_LEVEL
+        if use_sentence_mode and self.video_item.word_data:
+            self.video_item.progress = 96.0
+            self.progress.emit(self.video_item, 96.0, "Resegmenting by sentences...")
+            sentence_segs = build_sentence_segments(self.video_item.word_data)
+            if sentence_segs:
+                self.video_item.segments = sentence_segs
 
         # Complete
         self.video_item.status = TranscriptionStatus.COMPLETED
@@ -185,6 +271,7 @@ class BatchTranscriptionWorker(QThread):
         video_items: list[VideoItem],
         model_manager: ModelManager,
         model_name: str = DEFAULT_MODEL,
+        segment_mode: str = SegmentationMode.NATURAL_PAUSES,
         parent=None
     ):
         """
@@ -194,12 +281,14 @@ class BatchTranscriptionWorker(QThread):
             video_items: List of video items to transcribe
             model_manager: Shared model manager instance
             model_name: Whisper model to use
+            segment_mode: Segmentation mode (natural_pauses or sentence_level)
             parent: Parent QObject
         """
         super().__init__(parent)
         self.video_items = video_items
         self.model_manager = model_manager
         self.model_name = model_name
+        self.segment_mode = segment_mode
         self._is_cancelled = False
         self._current_worker: Optional[TranscriptionWorker] = None
 
@@ -267,18 +356,23 @@ class BatchTranscriptionWorker(QThread):
 
             video_item.segments = []
 
+            # Always use word_timestamps for post-hoc mode switching
             segments_iter, info = model.transcribe(
                 str(audio_path),
                 beam_size=5,
                 language=None,
                 vad_filter=True,
+                word_timestamps=True,
             )
 
             total_duration = info.duration if info.duration > 0 else 1.0
+            raw_segments = []
 
             for segment in segments_iter:
                 if self._is_cancelled:
                     return
+
+                raw_segments.append(segment)
 
                 transcription_segment = TranscriptionSegment(
                     start=segment.start,
@@ -299,6 +393,19 @@ class BatchTranscriptionWorker(QThread):
 
             if self._is_cancelled:
                 return
+
+            # Store original segments and word data for post-hoc mode switching
+            video_item.original_segments = list(video_item.segments)
+            _store_word_data(video_item, raw_segments)
+
+            # Post-process: resegment by sentences if requested
+            use_sentence_mode = self.segment_mode == SegmentationMode.SENTENCE_LEVEL
+            if use_sentence_mode and video_item.word_data:
+                video_item.progress = 96.0
+                self.item_progress.emit(video_item, 96.0, "Resegmenting by sentences...")
+                sentence_segs = build_sentence_segments(video_item.word_data)
+                if sentence_segs:
+                    video_item.segments = sentence_segs
 
             video_item.status = TranscriptionStatus.COMPLETED
             video_item.progress = 100.0

@@ -26,7 +26,7 @@ VideoToTranscript/
 │   │   ├── transcription_worker.py # QThread workers
 │   │   └── model_manager.py       # Whisper model management
 │   ├── models/
-│   │   └── video_item.py          # VideoItem, TranscriptionSegment
+│   │   └── video_item.py          # VideoItem, TranscriptionSegment, WordTiming, SegmentationMode
 │   └── exporters/
 │       ├── txt_exporter.py        # Plain text
 │       ├── srt_exporter.py        # SRT subtitles
@@ -61,7 +61,8 @@ VideoToTranscript/
 │  │ - Add Folder │  │  - Timestamp toggle             │  │
 │  │ - Selection  │  │  - Edit mode                    │  │
 │  │ - Status     │  │  - Format preview               │  │
-│  │              │  │  - Export (TXT/SRT/VTT/JSON)    │  │
+│  │ - Sentence   │  │  - Export (TXT/SRT/VTT/JSON)    │  │
+│  │   segments   │  │  - Export All                    │  │
 │  └──────────────┘  └─────────────────────────────────┘  │
 ├─────────────────────────────────────────────────────────┤
 │                  Service Layer (QThread)                 │
@@ -92,6 +93,8 @@ VideoToTranscript/
 - **Format preview** - switch between TXT/SRT/VTT/JSON views
 - **Edit mode** - modify transcript text, updates all formats
 - **Export** - TXT respects timestamp checkbox; SRT/VTT/JSON include timing
+- **Export All** - Export all 4 formats to a directory at once
+- **Sentence segmentation** - Checkbox to split at sentence boundaries; switchable after transcription
 
 ## Edit Mode
 
@@ -159,6 +162,9 @@ The `VideoToTranscript.spec` file configures:
 - Uses INT8 quantization on CPU/Apple Silicon
 - QThread prevents UI blocking during transcription
 - Folder search handles both lowercase and uppercase extensions
+- `word_timestamps=True` is always enabled during transcription so users can switch between segmentation modes after the fact
+- Word-level timing data stored on `VideoItem.word_data`; original segments on `VideoItem.original_segments`
+- `build_sentence_segments()` in `transcription_worker.py` is the public API for sentence resegmentation
 
 ## Release Workflow
 

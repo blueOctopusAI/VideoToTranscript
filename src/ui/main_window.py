@@ -20,9 +20,9 @@ from PySide6.QtWidgets import (
     QFormLayout,
 )
 
-from ..models.video_item import VideoItem, TranscriptionSegment
+from ..models.video_item import VideoItem, TranscriptionSegment, SegmentationMode
 from ..services.model_manager import ModelManager, AVAILABLE_MODELS, DEFAULT_MODEL
-from ..services.transcription_worker import TranscriptionWorker, BatchTranscriptionWorker
+from ..services.transcription_worker import TranscriptionWorker, BatchTranscriptionWorker, build_sentence_segments
 from .video_list_widget import VideoListWidget
 from .transcript_panel import TranscriptPanel
 
@@ -73,7 +73,6 @@ class SettingsDialog(QDialog):
     def get_selected_model(self) -> str:
         """Get the selected model name."""
         return self.model_combo.currentData()
-
 
 class MainWindow(QMainWindow):
     """Main application window."""
@@ -164,11 +163,37 @@ class MainWindow(QMainWindow):
         # Video list signals
         self.video_list.video_selected.connect(self._on_video_selected)
         self.video_list.transcribe_requested.connect(self._on_transcribe_requested)
+        self.video_list.sentence_segments_checkbox.stateChanged.connect(self._on_segment_mode_changed)
 
     @Slot(VideoItem)
     def _on_video_selected(self, video_item: VideoItem) -> None:
         """Handle video selection."""
         self.transcript_panel.set_video(video_item)
+
+    @Slot(int)
+    def _on_segment_mode_changed(self, state: int) -> None:
+        """Handle sentence-level segments checkbox toggle.
+
+        Re-segments the current video's transcript without re-transcribing,
+        using stored word-level timing data.
+        """
+        current = self.transcript_panel._current_video
+        if not current or not current.is_transcribed:
+            return
+
+        if self.video_list.sentence_segments_checkbox.isChecked():
+            # Switch to sentence-level segments
+            if current.word_data:
+                sentence_segs = build_sentence_segments(current.word_data)
+                if sentence_segs:
+                    current.segments = sentence_segs
+        else:
+            # Switch back to natural pauses
+            if current.original_segments:
+                current.segments = list(current.original_segments)
+
+        # Refresh transcript display
+        self.transcript_panel._refresh_display()
 
     @Slot(list)
     def _on_transcribe_requested(self, video_items: list[VideoItem]) -> None:
@@ -196,18 +221,39 @@ class MainWindow(QMainWindow):
         ]
 
         if not items_to_transcribe:
-            QMessageBox.information(
+            # All selected are already transcribed - offer to re-transcribe
+            reply = QMessageBox.question(
                 self,
-                "Nothing to Transcribe",
-                "All selected videos have already been transcribed."
+                "Re-transcribe?",
+                "All selected videos have already been transcribed.\n\n"
+                "Would you like to re-transcribe them?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
             )
-            return
+            if reply == QMessageBox.StandardButton.No:
+                return
+            # Clear transcriptions and re-transcribe
+            for item in video_items:
+                if not item.is_processing:
+                    item.clear_transcription()
+                    self.video_list.update_video_status(item)
+            items_to_transcribe = [
+                item for item in video_items
+                if not item.is_processing
+            ]
+            if not items_to_transcribe:
+                return
 
         # Start transcription
         if len(items_to_transcribe) == 1:
             self._transcribe_single(items_to_transcribe[0])
         else:
             self._transcribe_batch(items_to_transcribe)
+
+    def _get_segment_mode(self) -> str:
+        """Get the current segmentation mode from the checkbox."""
+        if self.video_list.sentence_segments_checkbox.isChecked():
+            return SegmentationMode.SENTENCE_LEVEL
+        return SegmentationMode.NATURAL_PAUSES
 
     def _transcribe_single(self, video_item: VideoItem) -> None:
         """Transcribe a single video."""
@@ -217,6 +263,7 @@ class MainWindow(QMainWindow):
             video_item=video_item,
             model_manager=self._model_manager,
             model_name=self._current_model,
+            segment_mode=self._get_segment_mode(),
             parent=self
         )
 
@@ -240,6 +287,7 @@ class MainWindow(QMainWindow):
             video_items=video_items,
             model_manager=self._model_manager,
             model_name=self._current_model,
+            segment_mode=self._get_segment_mode(),
             parent=self
         )
 

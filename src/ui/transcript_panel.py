@@ -78,6 +78,7 @@ class TranscriptPanel(QWidget):
 
         # Header with video name
         header_layout = QHBoxLayout()
+        header_layout.setContentsMargins(0, 0, 0, 0)
 
         self.header_label = QLabel("Transcript")
         self.header_label.setStyleSheet("font-weight: bold; font-size: 14px;")
@@ -130,20 +131,33 @@ class TranscriptPanel(QWidget):
 
         view_options_layout.addStretch()
 
-        # Edit button
-        self.edit_btn = QPushButton("Edit")
+        # Edit button - styled to stand out
+        self.edit_btn = QPushButton("\u270e Edit")
         self.edit_btn.setEnabled(False)
         self.edit_btn.setCheckable(True)
         self.edit_btn.setToolTip("Toggle edit mode to modify transcript")
         self.edit_btn.setStyleSheet("""
             QPushButton {
-                padding: 4px 12px;
+                padding: 6px 16px;
                 border-radius: 4px;
+                border: 2px solid #1976d2;
+                background-color: #e3f2fd;
+                color: #1976d2;
+                font-weight: bold;
+                font-size: 13px;
+            }
+            QPushButton:hover {
+                background-color: #bbdefb;
+            }
+            QPushButton:disabled {
+                border: 2px solid #ccc;
+                background-color: #f5f5f5;
+                color: #aaa;
             }
             QPushButton:checked {
                 background-color: #ff9800;
                 color: white;
-                border: none;
+                border: 2px solid #f57c00;
             }
         """)
         view_options_layout.addWidget(self.edit_btn)
@@ -190,6 +204,26 @@ class TranscriptPanel(QWidget):
         """)
         export_layout.addWidget(self.export_btn)
 
+        self.export_all_btn = QPushButton("Export All")
+        self.export_all_btn.setEnabled(False)
+        self.export_all_btn.setToolTip("Export all formats (TXT, SRT, VTT, JSON) at once")
+        self.export_all_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #1976d2;
+                color: white;
+                border: none;
+                padding: 8px 16px;
+                border-radius: 4px;
+            }
+            QPushButton:hover {
+                background-color: #1565c0;
+            }
+            QPushButton:disabled {
+                background-color: #ccc;
+            }
+        """)
+        export_layout.addWidget(self.export_all_btn)
+
         self.copy_btn = QPushButton("Copy")
         self.copy_btn.setEnabled(False)
         self.copy_btn.setToolTip("Copy transcript to clipboard")
@@ -202,6 +236,7 @@ class TranscriptPanel(QWidget):
     def _connect_signals(self) -> None:
         """Connect widget signals to slots."""
         self.export_btn.clicked.connect(self._on_export)
+        self.export_all_btn.clicked.connect(self._on_export_all)
         self.copy_btn.clicked.connect(self._on_copy)
         self.format_combo.currentIndexChanged.connect(self._on_format_changed)
         self.show_timestamps_checkbox.stateChanged.connect(self._on_timestamps_toggled)
@@ -237,6 +272,7 @@ class TranscriptPanel(QWidget):
         self.format_combo.setEnabled(False)
         self.show_timestamps_checkbox.setEnabled(False)
         self.export_btn.setEnabled(False)
+        self.export_all_btn.setEnabled(False)
         self.copy_btn.setEnabled(False)
 
         # Display in editable format
@@ -263,6 +299,7 @@ class TranscriptPanel(QWidget):
         self.format_combo.setEnabled(True)
         self._on_format_changed(self.format_combo.currentIndex())  # Restore checkbox state
         self.export_btn.setEnabled(True)
+        self.export_all_btn.setEnabled(True)
         self.copy_btn.setEnabled(True)
 
         # Refresh display
@@ -376,6 +413,7 @@ class TranscriptPanel(QWidget):
         if video_item.is_transcribed:
             self._display_transcript(video_item)
             self.export_btn.setEnabled(True)
+            self.export_all_btn.setEnabled(True)
             self.copy_btn.setEnabled(True)
             self.edit_btn.setEnabled(True)
         else:
@@ -384,6 +422,7 @@ class TranscriptPanel(QWidget):
                 f"Click 'Transcribe' to generate transcript for:\n{video_item.filename}"
             )
             self.export_btn.setEnabled(False)
+            self.export_all_btn.setEnabled(False)
             self.copy_btn.setEnabled(False)
             self.edit_btn.setEnabled(False)
 
@@ -531,6 +570,7 @@ class TranscriptPanel(QWidget):
             self.status_label.setText("Complete")
             self.status_label.setStyleSheet("color: #4caf50;")
             self.export_btn.setEnabled(True)
+            self.export_all_btn.setEnabled(True)
             self.copy_btn.setEnabled(True)
             self.edit_btn.setEnabled(True)
 
@@ -560,8 +600,12 @@ class TranscriptPanel(QWidget):
 
         format_name, extension, exporter_class = format_info[format_idx]
 
-        # Get save path
-        default_name = self._current_video.file_path.stem + extension
+        # Get save path - TXT with timestamps gets _timestamped suffix
+        stem = self._current_video.file_path.stem
+        if format_idx == self.FORMAT_TXT and self.show_timestamps_checkbox.isChecked():
+            default_name = f"{stem}_timestamped{extension}"
+        else:
+            default_name = f"{stem}{extension}"
         default_path = str(self._current_video.file_path.parent / default_name)
 
         file_path, _ = QFileDialog.getSaveFileName(
@@ -592,6 +636,75 @@ class TranscriptPanel(QWidget):
                 "Export Failed",
                 f"Failed to export transcript:\n{str(e)}"
             )
+
+    def _on_export_all(self) -> None:
+        """Export all formats (TXT, SRT, VTT, JSON) at once."""
+        if not self._current_video or not self._current_video.is_transcribed:
+            return
+
+        # Prompt for directory
+        directory = QFileDialog.getExistingDirectory(
+            self,
+            "Export All Formats - Choose Directory",
+            str(self._current_video.file_path.parent)
+        )
+
+        if not directory:
+            return
+
+        dir_path = Path(directory)
+        stem = self._current_video.file_path.stem
+        include_timestamps = self.show_timestamps_checkbox.isChecked()
+
+        # Build file list
+        txt_name = f"{stem}_timestamped.txt" if include_timestamps else f"{stem}.txt"
+        files_to_export = [
+            (txt_name, TxtExporter, True),
+            (f"{stem}.srt", SrtExporter, False),
+            (f"{stem}.vtt", VttExporter, False),
+            (f"{stem}.json", JsonExporter, False),
+        ]
+
+        # Check for existing files
+        existing = [name for name, _, _ in files_to_export if (dir_path / name).exists()]
+        if existing:
+            reply = QMessageBox.question(
+                self,
+                "Files Already Exist",
+                f"The following files already exist and will be overwritten:\n\n"
+                + "\n".join(f"  - {name}" for name in existing)
+                + "\n\nContinue?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+            )
+            if reply == QMessageBox.StandardButton.No:
+                return
+
+        # Export all formats
+        exported = []
+        errors = []
+        for filename, exporter_class, is_txt in files_to_export:
+            file_path = dir_path / filename
+            try:
+                if is_txt:
+                    exporter_class.export(
+                        self._current_video, file_path,
+                        include_timestamps=include_timestamps
+                    )
+                else:
+                    exporter_class.export(self._current_video, file_path)
+                exported.append(filename)
+            except Exception as e:
+                errors.append(f"{filename}: {e}")
+
+        # Show summary
+        if errors:
+            msg = f"Exported {len(exported)} of 4 files to:\n{directory}\n\n"
+            msg += "Errors:\n" + "\n".join(errors)
+            QMessageBox.warning(self, "Export Partially Complete", msg)
+        else:
+            msg = f"All 4 formats exported to:\n{directory}\n\n"
+            msg += "\n".join(f"  - {name}" for name in exported)
+            QMessageBox.information(self, "Export All Complete", msg)
 
     def _on_copy(self) -> None:
         """Copy transcript to clipboard (copies current view)."""
@@ -630,5 +743,6 @@ class TranscriptPanel(QWidget):
         self.transcript_text.clear()
         self.progress_group.hide()
         self.export_btn.setEnabled(False)
+        self.export_all_btn.setEnabled(False)
         self.copy_btn.setEnabled(False)
         self.edit_btn.setEnabled(False)

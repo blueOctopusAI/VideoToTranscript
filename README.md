@@ -13,7 +13,9 @@ A desktop application that transcribes video and audio files using AI. All proce
 - **Live preview** - Watch the transcript appear in real-time
 - **Edit mode** - Fix words, add punctuation, capitalize names
 - **Multiple formats** - Export to TXT, SRT, VTT, or JSON
+- **Export All** - Export all formats at once to a directory
 - **Timestamps** - Toggle timestamps on/off
+- **Sentence segmentation** - Split at sentence boundaries instead of speech pauses
 - **100% local** - Uses Whisper AI running on your Mac
 - **Apple Silicon optimized** - Fast performance on M1/M2/M3/M4
 
@@ -146,7 +148,7 @@ cd VideoToTranscript
 3. **Transcribe** - Click "Transcribe Selected" and wait for processing
 4. **Review** - The transcript appears in the right panel
 5. **Edit (optional)** - Click "Edit" to fix any mistakes
-6. **Export** - Choose a format and click "Export"
+6. **Export** - Choose a format and click "Export", or use "Export All" for all formats at once
 
 ### Timestamps
 
@@ -190,6 +192,17 @@ Access via **Edit > Settings** in the menu bar.
 | `large-v3` | 1.5 GB | Slowest | Best | Maximum accuracy |
 
 Models download automatically on first use and are cached for future runs.
+
+### Segmentation Mode
+
+Use the **"Sentence-level segments"** checkbox in the left panel to control how the transcript is divided:
+
+| Mode | Description |
+|------|-------------|
+| **Unchecked** (default) | Segments at speech pauses (Whisper default) |
+| **Checked** | Splits at sentence boundaries (., !, ?) for shorter, cleaner segments |
+
+You can toggle this checkbox at any time - even after transcription is complete. The transcript re-segments instantly without re-processing.
 
 ---
 
